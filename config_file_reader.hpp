@@ -3,7 +3,6 @@
 
 #include <cstdio>
 #include <cstdlib>
-#include <cstring>
 
 #include <map>
 #include <string>
@@ -11,10 +10,15 @@
 
 namespace sun {
 
-extern "C" {
+using std::vector;
+using std::string;
+using std::map;
 
+extern "C" {
 // Return the length of final target string.
-int trim(const char *src, const size_t src_size, char *target);
+int sun_trim(const char *src, const size_t src_size, char *target);
+
+size_t sun_strlen(const char *str);
 
 } // extern "C"
 
@@ -23,29 +27,32 @@ class ConfigFile {
 public:
   ConfigFile() {}
 
-  explicit ConfigFile(const std::string& path);
+  explicit ConfigFile(const string& path);
 
   ~ConfigFile();
 
   virtual T *Read() = 0;
 
 protected:
-  std::string file_path_;
+  string file_path_;
 
   T *content_;
 };
 
 struct ContentTini {
   struct Parameter {
-    std::string key;
-    std::string val;
+    string key;
+    string val;
   };
-  std::map<std::string, std::vector<int>> sections;
-  std::vector<Parameter> parameters;
+
+  inline string GetParameter(const string& section, const string& key) const;
+
+  map<string, vector<int>> sections;
+
+  vector<Parameter> parameters;
 };
 
-template <typename T>
-class ConfigFileTini : public ConfigFile<T> {
+class ConfigFileTini : public ConfigFile<ContentTini> {
 public:
   enum LineAttr {
     EMPTY,
@@ -58,25 +65,29 @@ public:
     SIZE,
   };
 
-  ConfigFileTini<T>(const std::string& path) : ConfigFile<T>(path) {}
+  ConfigFileTini(const string& path) : ConfigFile<ContentTini>(path) {}
 
-  T *Read();
+  ContentTini *Read();
 
 private:
   LineAttr ParseLine(const char *line);
-  std::string last_section_;
+
+  string last_section_;
+
+public:
+  const static size_t MAX_PROPERTY_LEN = 1024;
 };
 
 extern "C" {
 
-int trim(const char *src, const size_t src_size, char *target)
+int sun_trim(const char *src, const size_t src_size, char *target)
 {
   size_t sfront = 0;
-  for(; sfront < src_size && ' ' == src[sfront]; ++sfront) {}
+  for(; sfront < src_size && (' ' == src[sfront] || '\t' == src[sfront] || '\n' == src[sfront]); ++sfront) {}
 
   size_t srear = src_size - 1;
   if(srear > sfront) {
-    for(; ' ' == src[srear] || '\n' == src[srear]; --srear) {}
+    for(; ' ' == src[srear] || '\n' == src[srear] || '\t' == src[srear]; --srear) {}
   }
 
   size_t i = 0;
@@ -88,11 +99,32 @@ int trim(const char *src, const size_t src_size, char *target)
   return i;
 }
 
+size_t sun_strlen(const char *str) {
+  const char *curr = str;
+  for(; *curr; ++curr) {}
+  return curr - str;
+}
+
 } // extern "C"
 
+//ContentTini
+string ContentTini::GetParameter(const string& section, const string& in_key) const {
+  auto sec = sections.find(section);
+  if(sections.end() == sec) {
+    return "";
+  }
+  for(auto& i : sec->second) {
+    if(parameters[i].key == in_key) {
+      return parameters[i].val;
+    }
+  }
+  return "";
+}
+
+// ConfigFile<T>
 template <typename T>
-ConfigFile<T>::ConfigFile(const std::string& path) : file_path_(path),
-                                                     content_(new T)
+ConfigFile<T>::ConfigFile(const string& path) : file_path_(path),
+                                                content_(new T)
 {
 }
 
@@ -105,11 +137,10 @@ ConfigFile<T>::~ConfigFile()
 }
 
 // ConfigFileTini
-template <typename T>
-typename ConfigFileTini<T>::LineAttr ConfigFileTini<T>::ParseLine(const char *line)
+typename ConfigFileTini::LineAttr ConfigFileTini::ParseLine(const char *line)
 {
-  char data[1024] = {};
-  size_t data_size = trim(line, strlen(line), data);
+  char data[MAX_PROPERTY_LEN] = {};
+  size_t data_size = sun_trim(line, sun_strlen(line), data);
 
   // Empty line.
   if(0 == data_size) {
@@ -122,9 +153,9 @@ typename ConfigFileTini<T>::LineAttr ConfigFileTini<T>::ParseLine(const char *li
   }
 
   if('[' == data[0] && ']' == data[data_size - 1]) {
-    last_section_ = std::string(data + 1, data_size - 2);
-    if(ConfigFile<T>::content_->sections.find(last_section_) == ConfigFile<T>::content_->sections.end()) {
-      ConfigFile<T>::content_->sections.insert(make_pair(last_section_, std::vector<int>()));
+    last_section_ = string(data + 1, data_size - 2);
+    if(this->content_->sections.find(last_section_) == this->content_->sections.end()) {
+      this->content_->sections.insert(make_pair(last_section_, vector<int>()));
     }
     return SECTION;
   }
@@ -143,35 +174,37 @@ typename ConfigFileTini<T>::LineAttr ConfigFileTini<T>::ParseLine(const char *li
     return WRONG_SYNTAX;
   }
 
-  char key[1024] = {};
-  int key_size = trim(line, equal_sign_index, key);
+  char key[MAX_PROPERTY_LEN] = {};
+  int key_size = sun_trim(data, equal_sign_index, key);
   if(key_size < 1) {
     return EMPTY_KEY;
   }
 
-  char val[1024] = {};
-  int val_size = trim(line + equal_sign_index + 1, data_size, val);
+  char val[MAX_PROPERTY_LEN] = {};
+  int val_size = sun_trim(data + equal_sign_index + 1, data_size, val);
   if(val_size < 1) {
     return EMPTY_VAL;
   }
 
-  ConfigFile<T>::content_->sections[last_section_].push_back(ConfigFile<T>::content_->parameters.size());
-  ConfigFile<T>::content_->parameters.push_back({std::string(key), std::string(val)});
+  this->content_->sections[last_section_].push_back(this->content_->parameters.size());
+  this->content_->parameters.push_back({string(key), string(val)});
 
   return PARAMETER;
 }
 
-template <typename T>
-T *ConfigFileTini<T>::Read()
+ContentTini *ConfigFileTini::Read()
 {
+  // TODO
+  // File lock does not seems neccesery.
   FILE *file = fopen(this->file_path_.c_str(), "r");
   if(nullptr == file) {
     return nullptr;
   }
-  char line[1024] = {};
-  while(fgets(line, 1024, file)) {
+  char line[MAX_PROPERTY_LEN] = {};
+  while(fgets(line, MAX_PROPERTY_LEN, file)) {
     ParseLine(line);
   }
+  fclose(file);
   return this->content_;
 }
 
