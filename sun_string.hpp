@@ -12,11 +12,15 @@ size_t sun_strlen(const char *str);
 int sun_trim(const char *src, const size_t src_size, char *target)
 {
   size_t sfront = 0;
-  for(; sfront < src_size && (' ' == src[sfront] || '\t' == src[sfront] || '\n' == src[sfront]); ++sfront) {}
+  for(; 
+      sfront < src_size && (' ' == src[sfront] || '\t' == src[sfront] || '\n' == src[sfront]); 
+      ++sfront) {
+  }
 
   size_t srear = src_size - 1;
-  if(srear > sfront) {
-    for(; ' ' == src[srear] || '\n' == src[srear] || '\t' == src[srear]; --srear) {}
+  for(; 
+      srear > sfront && (' ' == src[srear] || '\n' == src[srear] || '\t' == src[srear]); 
+      --srear) {
   }
 
   size_t i = 0;

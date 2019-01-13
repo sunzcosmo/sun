@@ -64,7 +64,7 @@ public:
 
   ConfigFileTini(const string& path) : ConfigFile<ContentTini>(path) {}
 
-  ContentTini *Read();
+  virtual ContentTini *Read();
 
 private:
   LineAttr ParseLine(const char *line);
@@ -154,13 +154,13 @@ ConfigFileTini::LineAttr ConfigFileTini::ParseLine(const char *line)
 ContentTini *ConfigFileTini::Read()
 {
   // TODO
-  // File lock maybe.
+  // File lock.
   FILE *file = fopen(this->file_path_.c_str(), "r");
   if(nullptr == file) {
     return nullptr;
   }
   char line[MAX_PROPERTY_LEN] = {};
-  while(fgets(line, MAX_PROPERTY_LEN, file)) {
+  while(fgets(line, MAX_PROPERTY_LEN * 2, file)) {
     ParseLine(line);
   }
   fclose(file);

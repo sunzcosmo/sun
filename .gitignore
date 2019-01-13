@@ -30,3 +30,6 @@
 *.exe
 *.out
 *.app
+
+# Test module
+test*
