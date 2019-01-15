@@ -1,5 +1,5 @@
-#ifndef _CONFIG_FILE_READER_HPP_
-#define _CONFIG_FILE_READER_HPP_
+#ifndef _SUN_CONFIG_FILE_HPP_
+#define _SUN_CONFIG_FILE_HPP_
 
 #include <cstdio>
 #include <cstdlib>
@@ -16,14 +16,16 @@ using std::vector;
 using std::string;
 using std::map;
 
+using ini_section_map = map<string, string>;
+
 template <typename T>
 class ConfigFile {
 public:
-  ConfigFile() {}
+  ConfigFile() = 0;
 
   explicit ConfigFile(const string& path);
 
-  ~ConfigFile();
+  ~ConfigFile() noexcept;
 
   virtual T *Read() = 0;
 
@@ -34,14 +36,9 @@ protected:
 };
 
 struct ContentTini {
-  struct Parameter {
-    string key;
-    string val;
-  };
+  map<string, ini_section_map> sections;
 
-  using sections_map = map<string, string>;
-
-  map<string, sections_map> sections;
+  ini_section_map global_section;
 
   inline int Insert(const string& section,
                     const string& key,
@@ -51,10 +48,10 @@ struct ContentTini {
 
 class ConfigFileTini : public ConfigFile<ContentTini> {
 public:
-  enum LineAttr {
+  enum LINET {
     EMPTY,
     COMMENT,
-    WRONG_SYNTAX,
+    SYNTAX_ERROR,
     EMPTY_KEY,
     EMPTY_VAL,
     SECTION,
@@ -62,14 +59,20 @@ public:
     SIZE,
   };
 
-  ConfigFileTini(const string& path) : ConfigFile<ContentTini>(path) {}
+  ConfigFileTini(const string& path) : ConfigFile<ContentTini>(path),
+                                       section_global_(false) {
+  }
+
+  virtual ~ConfigFileTini() noexcept {}
 
   virtual ContentTini *Read();
 
 private:
-  LineAttr ParseLine(const char *line);
+  LINET ParseLine(const char *line);
 
   string last_section_;
+
+  bool section_global_;
 
 public:
   const static size_t MAX_PROPERTY_LEN = 1024;
@@ -92,7 +95,7 @@ ConfigFile<T>::ConfigFile(const string& path) : file_path_(path),
 }
 
 template <typename T>
-ConfigFile<T>::~ConfigFile()
+ConfigFile<T>::~ConfigFile() noexcept
 {
   if(content_) {
     delete content_;
@@ -100,17 +103,15 @@ ConfigFile<T>::~ConfigFile()
 }
 
 // ConfigFileTini
-ConfigFileTini::LineAttr ConfigFileTini::ParseLine(const char *line)
+ConfigFileTini::LINET ConfigFileTini::ParseLine(const char *line)
 {
   char data[MAX_PROPERTY_LEN] = {};
   size_t data_size = sun_trim(line, sun_strlen(line), data);
 
-  // Empty line.
   if(0 == data_size) {
     return EMPTY;
   }
 
-  // Comment
   if(';' == data[0]) {
     return COMMENT;
   }
@@ -121,17 +122,20 @@ ConfigFileTini::LineAttr ConfigFileTini::ParseLine(const char *line)
   }
 
   if(last_section_.empty()) {
-    return WRONG_SYNTAX;
+    section_global_ = true;
   }
 
   size_t equal_sign_index = 0;
   for(;
       equal_sign_index < data_size && '=' != data[equal_sign_index];
       ++equal_sign_index) {
+    if(';' == data[equal_sign_index]) {
+      return SYNTAX_ERROR;
+    }
   }
 
   if(data_size == equal_sign_index) {
-    return WRONG_SYNTAX;
+    return SYNTAX_ERROR;
   }
 
   char key[MAX_PROPERTY_LEN] = {};
@@ -145,8 +149,12 @@ ConfigFileTini::LineAttr ConfigFileTini::ParseLine(const char *line)
   if(val_size < 1) {
     return EMPTY_VAL;
   }
-
-  this->content_->Insert(last_section_, key, val);
+  
+  if(section_global_) {
+    this->content_->global_section[key] = val;
+  } else {
+    this->content_->Insert(last_section_, key, val);
+  }
 
   return PARAMETER;
 }
@@ -169,4 +177,4 @@ ContentTini *ConfigFileTini::Read()
 
 } // namespace sun
 
-#endif // _CONFIG_FILE_READER_HPP_
+#endif // _SUN_CONFIG_FILE_HPP_

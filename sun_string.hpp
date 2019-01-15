@@ -1,6 +1,8 @@
 #ifndef _SUN_STRING_HPP_
 #define _SUN_STRING_HPP_
 
+#include "sun_config.hpp"
+
 namespace sun {
 
 extern "C" {
@@ -39,6 +41,19 @@ size_t sun_strlen(const char *str) {
 }
 
 } // extern "C"
+
+class SunString {
+private:
+  u_char *data_;
+
+  size_t size_;
+
+public:
+  inline size_t size();
+
+  inline u_char *c_str();
+  
+}; // class SunString
 
 } // namespace sun
 
